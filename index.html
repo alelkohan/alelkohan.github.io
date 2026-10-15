@@ -1,0 +1,1937 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AstroSim 3D - Simulasi Gravitasi N-Body RK4</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Three.js r128 Core & Post-Processing Addons -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+
+    <style>
+        * {
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .font-mono-code {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #030712;
+        }
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        /* Glassmorphism Styling */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.68);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+        .glass-input {
+            background: rgba(30, 41, 59, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #f8fafc;
+            transition: all 0.2s ease;
+        }
+        .glass-input:focus {
+            outline: none;
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.4);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.4);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(56, 189, 248, 0.7);
+        }
+        input[type=range] {
+            accent-color: #38bdf8;
+        }
+    </style>
+</head>
+<body class="text-slate-100 antialiased">
+
+    <!-- 3D WebGL Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Top Header & Quick Stats Bar -->
+    <header class="fixed top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+        <!-- Brand & Title -->
+        <div class="glass-panel px-4 py-2.5 rounded-2xl flex items-center gap-3 pointer-events-auto">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-purple-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
+                <svg class="w-5 h-5 text-white animate-spin" style="animation-duration: 14s;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="4" stroke-width="2"></circle>
+                    <path stroke-linecap="round" stroke-width="1.5" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6z"></path>
+                </svg>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-sm md:text-base font-bold tracking-tight bg-gradient-to-r from-sky-300 via-indigo-200 to-amber-200 bg-clip-text text-transparent">
+                        AstroSim 3D
+                    </h1>
+                    <span class="text-[10px] font-mono-code uppercase px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-400/30">
+                        RK4 Engine
+                    </span>
+                </div>
+                <p class="text-[11px] text-slate-400 hidden sm:block">Integrator Simulasi Gravitasi N-Body & Shader Prosedural</p>
+            </div>
+        </div>
+
+        <!-- Real-time Telemetry Badges -->
+        <div class="glass-panel px-4 py-2 rounded-2xl flex items-center gap-4 pointer-events-auto text-xs">
+            <div class="flex flex-col">
+                <span class="text-[10px] text-slate-400 uppercase tracking-wider">Benda Langit</span>
+                <span id="stat-body-count" class="font-mono-code font-semibold text-sky-400 text-sm">0</span>
+            </div>
+            <div class="h-6 w-px bg-slate-700/70"></div>
+            <div class="flex flex-col">
+                <span class="text-[10px] text-slate-400 uppercase tracking-wider">Waktu Simulasi</span>
+                <span id="stat-sim-time" class="font-mono-code font-semibold text-emerald-400 text-sm">0.00 thn</span>
+            </div>
+            <div class="h-6 w-px bg-slate-700/70 hidden sm:block"></div>
+            <div class="hidden sm:flex flex-col">
+                <span class="text-[10px] text-slate-400 uppercase tracking-wider">FPS</span>
+                <span id="stat-fps" class="font-mono-code font-semibold text-amber-300 text-sm">60</span>
+            </div>
+            <button id="btn-toggle-ui" class="ml-1 p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-600/50 transition" title="Sembunyikan/Tampilkan Panel Kontrol">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Main Left Control Panel (Glassmorphism) -->
+    <aside id="control-panel" class="fixed top-20 left-3 bottom-3 w-80 md:w-96 z-20 glass-panel rounded-2xl flex flex-col overflow-hidden transition-transform duration-300">
+        
+        <!-- Navigation Tabs -->
+        <div class="grid grid-cols-3 border-b border-slate-700/60 bg-slate-900/40 p-1.5 gap-1 text-xs font-medium">
+            <button data-tab="tab-simulasi" class="tab-btn active-tab py-2 px-2 rounded-xl bg-sky-500/20 text-sky-300 border border-sky-500/30 transition flex items-center justify-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                Kontrol
+            </button>
+            <button data-tab="tab-tambah" class="tab-btn py-2 px-2 rounded-xl text-slate-400 hover:text-slate-200 transition flex items-center justify-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                Tambah Benda
+            </button>
+            <button data-tab="tab-objek" class="tab-btn py-2 px-2 rounded-xl text-slate-400 hover:text-slate-200 transition flex items-center justify-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064"></path></svg>
+                Daftar Objek
+            </button>
+        </div>
+
+        <!-- Tab Content Container -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-5 text-xs">
+            
+            <!-- TAB 1: SIMULASI & PRESET -->
+            <div id="tab-simulasi" class="tab-content space-y-5">
+                <!-- Skenario Preset -->
+                <div class="space-y-2">
+                    <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                        Pilih Skenario Preset
+                    </label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="loadPreset('solar')" class="preset-btn p-2.5 rounded-xl bg-slate-800/70 hover:bg-sky-500/20 border border-slate-700 hover:border-sky-400/50 text-left transition group">
+                            <div class="font-semibold text-slate-200 group-hover:text-sky-300 flex items-center justify-between">
+                                <span>☀️ Tata Surya</span>
+                            </div>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Matahari, 6 planet & cincin Saturnus</p>
+                        </button>
+                        <button onclick="loadPreset('binary')" class="preset-btn p-2.5 rounded-xl bg-slate-800/70 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-400/50 text-left transition group">
+                            <div class="font-semibold text-slate-200 group-hover:text-amber-300 flex items-center justify-between">
+                                <span>✨ Bintang Biner</span>
+                            </div>
+                            <p class="text-[10px] text-slate-400 mt-0.5">2 bintang masif & planet sirkumbiner</p>
+                        </button>
+                        <button onclick="loadPreset('galaxy')" class="preset-btn p-2.5 rounded-xl bg-slate-800/70 hover:bg-purple-500/20 border border-slate-700 hover:border-purple-400/50 text-left transition group">
+                            <div class="font-semibold text-slate-200 group-hover:text-purple-300 flex items-center justify-between">
+                                <span>🌌 Tabrakan Galaksi</span>
+                            </div>
+                            <p class="text-[10px] text-slate-400 mt-0.5">2 inti lubang hitam & gugus bintang</p>
+                        </button>
+                        <button onclick="loadPreset('figure8')" class="preset-btn p-2.5 rounded-xl bg-slate-800/70 hover:bg-emerald-500/20 border border-slate-700 hover:border-emerald-400/50 text-left transition group">
+                            <div class="font-semibold text-slate-200 group-hover:text-emerald-300 flex items-center justify-between">
+                                <span>♾️ Tiga-Benda (8)</span>
+                            </div>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Orbit periodik stabil angka delapan</p>
+                        </button>
+                    </div>
+                </div>
+
+                <hr class="border-slate-800">
+
+                <!-- Kontrol Waktu & Integrator RK4 -->
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Kontrol Waktu & RK4</span>
+                        <div class="flex gap-1.5">
+                            <button id="btn-play-pause" class="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold transition flex items-center gap-1 shadow-lg shadow-sky-500/20">
+                                <span id="play-pause-text">Jeda</span>
+                            </button>
+                            <button id="btn-reset-preset" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition" title="Muat Ulang Preset Saat Ini">
+                                ↺ Reset
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Time Scale Slider -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-300">Kecepatan Waktu (Δt)</span>
+                            <span id="val-timescale" class="font-mono-code text-sky-400">1.0x</span>
+                        </div>
+                        <input id="slider-timescale" type="range" min="0.1" max="5.0" step="0.1" value="1.0" class="w-full h-1.5 bg-slate-700 rounded-lg cursor-pointer">
+                    </div>
+
+                    <!-- Substeps RK4 Slider -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-300">Sub-Langkah RK4 / Frame</span>
+                            <span id="val-substeps" class="font-mono-code text-emerald-400">8 langkah</span>
+                        </div>
+                        <input id="slider-substeps" type="range" min="1" max="25" step="1" value="8" class="w-full h-1.5 bg-slate-700 rounded-lg cursor-pointer">
+                        <p class="text-[10px] text-slate-400">Meningkatkan sub-langkah menjaga kekekalan energi mekanik saat orbit dekat.</p>
+                    </div>
+
+                    <!-- Konstanta Gravitasi G -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-300">Konstanta Gravitasi (G)</span>
+                            <span id="val-gravity" class="font-mono-code text-amber-400">1.00</span>
+                        </div>
+                        <input id="slider-gravity" type="range" min="0.2" max="3.0" step="0.05" value="1.0" class="w-full h-1.5 bg-slate-700 rounded-lg cursor-pointer">
+                    </div>
+                </div>
+
+                <hr class="border-slate-800">
+
+                <!-- Pengaturan Visual & Efek -->
+                <div class="space-y-3">
+                    <span class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Visual, Jejak & Shader</span>
+
+                    <!-- Panjang Orbit Trail -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-300">Panjang Jejak Orbit</span>
+                            <span id="val-trail-length" class="font-mono-code text-purple-400">350 titik</span>
+                        </div>
+                        <input id="slider-trail-length" type="range" min="0" max="800" step="25" value="350" class="w-full h-1.5 bg-slate-700 rounded-lg cursor-pointer">
+                    </div>
+
+                    <!-- Kekuatan Efek Bloom -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-300">Intensitas Cahaya (Bloom)</span>
+                            <span id="val-bloom" class="font-mono-code text-amber-300">1.35</span>
+                        </div>
+                        <input id="slider-bloom" type="range" min="0.0" max="3.0" step="0.05" value="1.35" class="w-full h-1.5 bg-slate-700 rounded-lg cursor-pointer">
+                    </div>
+
+                    <!-- Checkboxes -->
+                    <div class="grid grid-cols-2 gap-2 pt-1">
+                        <label class="flex items-center gap-2 p-2 rounded-xl bg-slate-800/50 border border-slate-700/60 cursor-pointer">
+                            <input id="chk-collisions" type="checkbox" checked class="rounded text-sky-500 focus:ring-0">
+                            <span class="text-slate-300">Fusi Tabrakan</span>
+                        </label>
+                        <label class="flex items-center gap-2 p-2 rounded-xl bg-slate-800/50 border border-slate-700/60 cursor-pointer">
+                            <input id="chk-grid" type="checkbox" class="rounded text-sky-500 focus:ring-0">
+                            <span class="text-slate-300">Grid Ruang 3D</span>
+                        </label>
+                        <label class="flex items-center gap-2 p-2 rounded-xl bg-slate-800/50 border border-slate-700/60 cursor-pointer">
+                            <input id="chk-barycenter" type="checkbox" checked class="rounded text-sky-500 focus:ring-0">
+                            <span class="text-slate-300">Pusat Massa</span>
+                        </label>
+                        <label class="flex items-center gap-2 p-2 rounded-xl bg-slate-800/50 border border-slate-700/60 cursor-pointer">
+                            <input id="chk-vectors" type="checkbox" class="rounded text-sky-500 focus:ring-0">
+                            <span class="text-slate-300">Vektor Kecepatan</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: TAMBAH BENDA LANGIT BARU -->
+            <div id="tab-tambah" class="tab-content hidden space-y-4">
+                <div class="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20 text-slate-300 text-[11px] leading-relaxed">
+                    Tambahkan planet, bulan, atau bintang baru secara langsung ke dalam ruang 3D. Gunakan tombol <strong>Kecepatan Orbit Otomatis</strong> agar benda langsung mengorbit bintang pusat secara stabil.
+                </div>
+
+                <!-- Nama & Tipe Benda -->
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">Nama Benda</label>
+                        <input id="inp-name" type="text" value="Kepler-452b" class="w-full px-2.5 py-1.5 rounded-lg glass-input text-xs">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">Tipe Shader</label>
+                        <select id="inp-type" class="w-full px-2.5 py-1.5 rounded-lg glass-input text-xs">
+                            <option value="terrestrial">Planet Terestrial (Bumi)</option>
+                            <option value="gas">Raksasa Gas (Jupiter)</option>
+                            <option value="rocky">Planet Batuan / Vulkanik</option>
+                            <option value="ice">Planet Es (Neptunus)</option>
+                            <option value="star">Bintang Bercahaya</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Massa, Radius & Warna -->
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">Massa (M)</label>
+                        <input id="inp-mass" type="number" step="0.5" min="0.01" value="2.5" class="w-full px-2.5 py-1.5 rounded-lg glass-input font-mono-code text-xs">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">Radius (R)</label>
+                        <input id="inp-radius" type="number" step="0.2" min="0.4" value="2.0" class="w-full px-2.5 py-1.5 rounded-lg glass-input font-mono-code text-xs">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">Warna Utama</label>
+                        <input id="inp-color" type="color" value="#38bdf8" class="w-full h-8 rounded-lg bg-transparent cursor-pointer border border-slate-600">
+                    </div>
+                </div>
+
+                <!-- Vektor Posisi Awal (X, Y, Z) -->
+                <div class="space-y-1.5">
+                    <div class="flex justify-between items-center">
+                        <label class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Vektor Posisi Awal (r₀)</label>
+                        <button type="button" id="btn-random-pos" class="text-[10px] text-sky-400 hover:underline">Acak Posisi</button>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <span class="text-[10px] text-slate-400">X</span>
+                            <input id="inp-px" type="number" step="5" value="85" class="w-full px-2 py-1.5 rounded-lg glass-input font-mono-code text-xs">
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400">Y</span>
+                            <input id="inp-py" type="number" step="5" value="0" class="w-full px-2 py-1.5 rounded-lg glass-input font-mono-code text-xs">
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400">Z</span>
+                            <input id="inp-pz" type="number" step="5" value="0" class="w-full px-2 py-1.5 rounded-lg glass-input font-mono-code text-xs">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vektor Kecepatan Awal (Vx, Vy, Vz) -->
+                <div class="space-y-1.5">
+                    <div class="flex justify-between items-center">
+                        <label class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Vektor Kecepatan Awal (v₀)</label>
+                        <button type="button" id="btn-calc-orbit" class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition">
+                            ⚡ Hitung Orbit Sirkular
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <span class="text-[10px] text-slate-400">Vx</span>
+                            <input id="inp-vx" type="number" step="0.1" value="0" class="w-full px-2 py-1.5 rounded-lg glass-input font-mono-code text-xs">
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400">Vy</span>
+                            <input id="inp-vy" type="number" step="0.1" value="0" class="w-full px-2 py-1.5 rounded-lg glass-input font-mono-code text-xs">
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400">Vz</span>
+                            <input id="inp-vz" type="number" step="0.1" value="3.42" class="w-full px-2 py-1.5 rounded-lg glass-input font-mono-code text-xs">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Opsi Cincin Planet -->
+                <label class="flex items-center gap-2 p-2.5 rounded-xl bg-slate-800/50 border border-slate-700/60 cursor-pointer">
+                    <input id="inp-ring" type="checkbox" class="rounded text-sky-500 focus:ring-0">
+                    <span class="text-slate-300">Tambahkan Sistem Cincin Planet</span>
+                </label>
+
+                <!-- Tombol Luncurkan -->
+                <button id="btn-spawn-body" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-semibold shadow-lg shadow-sky-500/25 transition flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    Luncurkan Benda Langit
+                </button>
+            </div>
+
+            <!-- TAB 3: DAFTAR OBJEK & FOKUS KAMERA -->
+            <div id="tab-objek" class="tab-content hidden space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Objek Aktif di Ruang 3D</span>
+                    <button id="btn-reset-camera" class="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700 transition">
+                        Kamera Bebas (Pusat)
+                    </button>
+                </div>
+                <p class="text-[11px] text-slate-400">Klik pada benda langit di bawah atau langsung di layar 3D untuk mengunci kamera mengikuti orbitnya.</p>
+                
+                <div id="body-list-container" class="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                    <!-- Diisi secara dinamis oleh JavaScript -->
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer Info Kamera -->
+        <div class="px-4 py-2.5 bg-slate-950/60 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+            <span>Target Kamera: <strong id="camera-target-label" class="text-sky-300">Pusat Koordinat</strong></span>
+            <span class="text-[10px] text-slate-500">Klik Kiri: Putar | Scroll: Zoom</span>
+        </div>
+    </aside>
+
+    <!-- Bottom-Right Real-Time Energy Graph Panel -->
+    <section id="energy-panel" class="fixed bottom-3 right-3 z-20 w-80 sm:w-96 glass-panel rounded-2xl p-3.5 pointer-events-auto transition-transform duration-300">
+        <div class="flex items-center justify-between mb-2">
+            <div>
+                <h2 class="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Analitik Energi Sistem (RK4)
+                </h2>
+                <p class="text-[10px] text-slate-400">Hukum Kekekalan Energi Mekanik</p>
+            </div>
+            <button id="btn-clear-graph" class="text-[10px] px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+                Bersihkan
+            </button>
+        </div>
+
+        <!-- Legend & Live Numbers -->
+        <div class="grid grid-cols-3 gap-1.5 mb-2 text-[10px] font-mono-code">
+            <div class="p-1.5 rounded-lg bg-slate-900/70 border border-emerald-500/30">
+                <div class="text-emerald-400 font-sans font-medium">Kinetik (Ek)</div>
+                <div id="val-ke" class="text-slate-100 font-semibold truncate">0.0</div>
+            </div>
+            <div class="p-1.5 rounded-lg bg-slate-900/70 border border-sky-500/30">
+                <div class="text-sky-400 font-sans font-medium">Potensial (Ep)</div>
+                <div id="val-pe" class="text-slate-100 font-semibold truncate">0.0</div>
+            </div>
+            <div class="p-1.5 rounded-lg bg-slate-900/70 border border-amber-500/30">
+                <div class="text-amber-300 font-sans font-medium">Total (Em)</div>
+                <div id="val-te" class="text-slate-100 font-semibold truncate">0.0</div>
+            </div>
+        </div>
+
+        <!-- 2D Canvas for Real-time Energy Plot -->
+        <div class="relative w-full h-28 rounded-xl bg-slate-950/80 border border-slate-800 overflow-hidden">
+            <canvas id="energy-canvas" class="w-full h-full block"></canvas>
+        </div>
+    </section>
+
+    <!-- Custom GLSL Shaders & Complete Simulation Script -->
+    <script>
+        /***********************************************************************
+         * 1. CUSTOM GLSL SHADERS (3D SIMPLEX NOISE & PROCEDURAL TEXTURES)
+         ***********************************************************************/
+        const NOISE_GLSL = `
+            // 3D Simplex Noise oleh Ian McEwan, Ashima Arts
+            vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+            vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+
+            float snoise(vec3 v){
+                const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+                const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+
+                vec3 i  = floor(v + dot(v, C.yyy));
+                vec3 x0 = v - i + dot(i, C.xxx);
+
+                vec3 g = step(x0.yzx, x0.xyz);
+                vec3 l = 1.0 - g;
+                vec3 i1 = min( g.xyz, l.zxy );
+                vec3 i2 = max( g.xyz, l.zxy );
+
+                vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+                vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+                vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
+
+                i = mod(i, 289.0 );
+                vec4 p = permute( permute( permute(
+                            i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                          + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
+                          + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+
+                float n_ = 1.0/7.0;
+                vec3  ns = n_ * D.wyz - D.xzx;
+
+                vec4 j = p - 49.0 * floor(p * ns.z *ns.z);
+
+                vec4 x_ = floor(j * ns.z);
+                vec4 y_ = floor(j - 7.0 * x_ );
+
+                vec4 x = x_ *ns.x + ns.yyyy;
+                vec4 y = y_ *ns.x + ns.yyyy;
+                vec4 h = 1.0 - abs(x) - abs(y);
+
+                vec4 b0 = vec4( x.xy, y.xy );
+                vec4 b1 = vec4( x.zw, y.zw );
+
+                vec4 s0 = floor(b0)*2.0 + 1.0;
+                vec4 s1 = floor(b1)*2.0 + 1.0;
+                vec4 sh = -step(h, vec4(0.0));
+
+                vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+                vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+
+                vec3 p0 = vec3(a0.xy,h.x);
+                vec3 p1 = vec3(a0.zw,h.y);
+                vec3 p2 = vec3(a1.xy,h.z);
+                vec3 p3 = vec3(a1.zw,h.w);
+
+                vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+                p0 *= norm.x;
+                p1 *= norm.y;
+                p2 *= norm.z;
+                p3 *= norm.w;
+
+                vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+                m = m * m;
+                return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
+            }
+
+            float fbm(vec3 p) {
+                float value = 0.0;
+                float amplitude = 0.5;
+                float frequency = 1.0;
+                for (int i = 0; i < 4; i++) {
+                    value += amplitude * snoise(p * frequency);
+                    frequency *= 2.05;
+                    amplitude *= 0.5;
+                }
+                return value;
+            }
+        `;
+
+        // Vertex Shader Bersama untuk Bintang dan Planet
+        const CELESTIAL_VERTEX_SHADER = `
+            varying vec3 vNormal;
+            varying vec3 vWorldPosition;
+            varying vec3 vLocalPosition;
+
+            void main() {
+                vLocalPosition = normalize(position);
+                vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                vWorldPosition = worldPosition.xyz;
+                vNormal = normalize(mat3(modelMatrix) * normal);
+                gl_Position = projectionMatrix * viewMatrix * worldPosition;
+            }
+        `;
+
+        // Fragment Shader untuk Bintang Pusat (Plasma & Korona Berkilau)
+        const STAR_FRAGMENT_SHADER = `
+            uniform float uTime;
+            uniform vec3 uColorPrimary;
+            uniform vec3 uColorSecondary;
+            varying vec3 vNormal;
+            varying vec3 vWorldPosition;
+            varying vec3 vLocalPosition;
+
+            ${NOISE_GLSL}
+
+            void main() {
+                vec3 p = vLocalPosition * 3.2;
+                float n1 = fbm(p + vec3(uTime * 0.18, -uTime * 0.12, uTime * 0.1));
+                float n2 = fbm(p * 2.4 - vec3(uTime * 0.25));
+                float plasma = clamp((n1 + n2) * 0.5 + 0.5, 0.0, 1.0);
+
+                vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+                float fresnel = pow(1.0 - max(dot(vNormal, viewDir), 0.0), 2.2);
+
+                vec3 coreColor = mix(uColorSecondary, uColorPrimary, plasma);
+                coreColor += vec3(1.0, 0.92, 0.75) * pow(plasma, 3.0) * 0.9;
+                coreColor += uColorPrimary * fresnel * 1.4;
+
+                // Nilai > 1.0 memicu efek UnrealBloomPass secara alami
+                gl_FragColor = vec4(coreColor * 1.65, 1.0);
+            }
+        `;
+
+        // Fragment Shader Prosedural untuk Planet (Terestrial, Gas, Batuan, Es) + Pencahayaan Dinamis Bintang
+        const PLANET_FRAGMENT_SHADER = `
+            uniform float uTime;
+            uniform int uShaderType; // 0: Terestrial, 1: Gas, 2: Batuan/Vulkanik, 3: Es
+            uniform vec3 uBaseColor;
+            uniform vec3 uAccentColor;
+            uniform vec3 uStarPositions[4];
+            uniform vec3 uStarColors[4];
+            uniform int uStarCount;
+
+            varying vec3 vNormal;
+            varying vec3 vWorldPosition;
+            varying vec3 vLocalPosition;
+
+            ${NOISE_GLSL}
+
+            void main() {
+                vec3 surfaceColor = uBaseColor;
+                float specularStrength = 0.15;
+                float cloudMask = 0.0;
+
+                if (uShaderType == 0) {
+                    // Planet Terestrial (Samudra, Benua, Es Kutub, Awan)
+                    float continent = fbm(vLocalPosition * 2.8);
+                    if (continent < 0.02) {
+                        // Samudra Dalam ke Dangkal
+                        surfaceColor = mix(uBaseColor * 0.55, uBaseColor * 1.15, smoothstep(-0.4, 0.02, continent));
+                        specularStrength = 0.75;
+                    } else {
+                        // Daratan & Pegunungan
+                        float elev = smoothstep(0.02, 0.45, continent);
+                        surfaceColor = mix(uAccentColor, vec3(0.45, 0.38, 0.28), elev);
+                        specularStrength = 0.08;
+                    }
+                    // Tudung Es Kutub
+                    float latitude = abs(vLocalPosition.y) + fbm(vLocalPosition * 4.0) * 0.12;
+                    if (latitude > 0.78) {
+                        surfaceColor = mix(surfaceColor, vec3(0.95, 0.98, 1.0), smoothstep(0.78, 0.88, latitude));
+                    }
+                    // Lapisan Awan Dinamis
+                    float clouds = fbm(vLocalPosition * 3.6 + vec3(uTime * 0.04, 0.0, uTime * 0.02));
+                    cloudMask = smoothstep(0.12, 0.48, clouds);
+                    surfaceColor = mix(surfaceColor, vec3(1.0), cloudMask * 0.65);
+
+                } else if (uShaderType == 1) {
+                    // Raksasa Gas (Sabuk Atmosfer & Badai Siklon)
+                    float turbulence = fbm(vLocalPosition * 4.2 + vec3(uTime * 0.03, 0.0, 0.0)) * 0.18;
+                    float bands = sin((vLocalPosition.y + turbulence) * 20.0) * 0.5 + 0.5;
+                    float fineBands = sin((vLocalPosition.y - turbulence * 0.5) * 45.0) * 0.5 + 0.5;
+                    surfaceColor = mix(uBaseColor * 0.65, uAccentColor, bands * 0.75 + fineBands * 0.25);
+                    specularStrength = 0.12;
+
+                } else if (uShaderType == 2) {
+                    // Planet Batuan / Kawah / Lava
+                    float craters = fbm(vLocalPosition * 5.0);
+                    surfaceColor = mix(uBaseColor * 0.5, uAccentColor, craters * 0.5 + 0.5);
+                    // Retakan magma pijar jika kawah sangat dalam
+                    float lava = smoothstep(-0.45, -0.32, craters);
+                    if (craters < -0.32) {
+                        surfaceColor = mix(vec3(1.4, 0.35, 0.05), surfaceColor, lava);
+                    }
+                    specularStrength = 0.05;
+
+                } else {
+                    // Planet Es / Kristal Metana
+                    float icePattern = abs(fbm(vLocalPosition * 3.5));
+                    surfaceColor = mix(uBaseColor, uAccentColor, icePattern);
+                    specularStrength = 0.55;
+                }
+
+                // Perhitungan Pencahayaan Dinamis dari Semua Bintang di Sistem
+                vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+                vec3 totalLight = vec3(0.055); // Ambient light ruang angkasa
+                vec3 totalSpecular = vec3(0.0);
+
+                for (int i = 0; i < 4; i++) {
+                    if (i >= uStarCount) break;
+                    vec3 lightDir = normalize(uStarPositions[i] - vWorldPosition);
+                    float diff = max(dot(vNormal, lightDir), 0.0);
+
+                    // Efek atmosfer lembut di sekitar garis terminator
+                    float terminator = smoothstep(-0.12, 0.25, dot(vNormal, lightDir));
+                    totalLight += uStarColors[i] * (diff * 0.85 + terminator * 0.25);
+
+                    // Specular Highlight (Pantulan Cahaya Bintang di Samudra/Es)
+                    vec3 reflectDir = reflect(-lightDir, vNormal);
+                    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 28.0);
+                    totalSpecular += uStarColors[i] * spec * specularStrength * diff;
+                }
+
+                // Efek Pendaran Atmosfer Tepi (Fresnel Rim Scattering)
+                float rim = pow(1.0 - max(dot(vNormal, viewDir), 0.0), 3.2);
+                vec3 atmosphereGlow = uBaseColor * rim * 0.42 * clamp(length(totalLight), 0.15, 1.2);
+
+                vec3 finalColor = surfaceColor * totalLight + totalSpecular + atmosphereGlow;
+                gl_FragColor = vec4(finalColor, 1.0);
+            }
+        `;
+
+
+        /***********************************************************************
+         * 2. STATE GLOBAL & KONFIGURASI SIMULASI
+         ***********************************************************************/
+        let scene, camera, renderer, controls, composer, bloomPass;
+        let gridHelper, barycenterMarker;
+        let bodies = [];
+        let particles = []; // Efek ledakan saat tabrakan
+        let bodyIdCounter = 1;
+
+        const simConfig = {
+            G: 1.0,
+            timeScale: 1.0,
+            baseDt: 0.016,
+            subSteps: 8,
+            trailLength: 350,
+            paused: false,
+            collisions: true,
+            showGrid: false,
+            showBarycenter: true,
+            showVectors: false,
+            currentPreset: 'solar',
+            simTimeYears: 0,
+            focusedBody: null
+        };
+
+        // Riwayat Energi untuk Grafik Real-Time
+        const energyHistory = {
+            maxPoints: 180,
+            kinetic: [],
+            potential: [],
+            total: []
+        };
+
+        // Variabel Telemetri FPS
+        let lastFrameTime = performance.now();
+        let frameCount = 0;
+
+
+        /***********************************************************************
+         * 3. KELAS CELESTIAL BODY (BENDA LANGIT & JEJAK ORBIT)
+         ***********************************************************************/
+        class CelestialBody {
+            constructor(options) {
+                this.id = bodyIdCounter++;
+                this.name = options.name || `Objek-${this.id}`;
+                this.mass = Number(options.mass) || 1.0;
+                this.radius = Number(options.radius) || 1.5;
+                this.isStar = Boolean(options.isStar);
+                this.shaderType = options.shaderType ?? 0; // 0:Terestrial, 1:Gas, 2:Batuan, 3:Es
+                this.colorHex = options.color || '#38bdf8';
+                this.accentHex = options.accentColor || '#10b981';
+                this.hasRing = Boolean(options.hasRing);
+
+                this.position = new THREE.Vector3(options.x || 0, options.y || 0, options.z || 0);
+                this.velocity = new THREE.Vector3(options.vx || 0, options.vy || 0, options.vz || 0);
+                this.rotationSpeed = options.rotationSpeed || (this.isStar ? 0.003 : 0.012);
+
+                this.trailPositions = [];
+                this.createMesh();
+                this.createTrail();
+                this.createVelocityArrow();
+            }
+
+            createMesh() {
+                const geometry = new THREE.SphereGeometry(this.radius, 48, 48);
+                const primaryColor = new THREE.Color(this.colorHex);
+                const secondaryColor = new THREE.Color(this.accentHex);
+
+                if (this.isStar) {
+                    this.uniforms = {
+                        uTime: { value: Math.random() * 100 },
+                        uColorPrimary: { value: primaryColor },
+                        uColorSecondary: { value: secondaryColor }
+                    };
+                    this.material = new THREE.ShaderMaterial({
+                        vertexShader: CELESTIAL_VERTEX_SHADER,
+                        fragmentShader: STAR_FRAGMENT_SHADER,
+                        uniforms: this.uniforms
+                    });
+                } else {
+                    // Sediakan array 4 bintang untuk uniform shader planet
+                    const defaultPositions = [
+                        new THREE.Vector3(), new THREE.Vector3(),
+                        new THREE.Vector3(), new THREE.Vector3()
+                    ];
+                    const defaultColors = [
+                        new THREE.Color(1, 1, 1), new THREE.Color(1, 1, 1),
+                        new THREE.Color(1, 1, 1), new THREE.Color(1, 1, 1)
+                    ];
+
+                    this.uniforms = {
+                        uTime: { value: Math.random() * 100 },
+                        uShaderType: { value: this.shaderType },
+                        uBaseColor: { value: primaryColor },
+                        uAccentColor: { value: secondaryColor },
+                        uStarPositions: { value: defaultPositions },
+                        uStarColors: { value: defaultColors },
+                        uStarCount: { value: 1 }
+                    };
+                    this.material = new THREE.ShaderMaterial({
+                        vertexShader: CELESTIAL_VERTEX_SHADER,
+                        fragmentShader: PLANET_FRAGMENT_SHADER,
+                        uniforms: this.uniforms
+                    });
+                }
+
+                this.mesh = new THREE.Mesh(geometry, this.material);
+                this.mesh.position.copy(this.position);
+                this.mesh.userData.body = this;
+
+                // Tambahkan Sistem Cincin jika diaktifkan (seperti Saturnus)
+                if (this.hasRing && !this.isStar) {
+                    const ringGeo = new THREE.RingGeometry(this.radius * 1.45, this.radius * 2.45, 64);
+                    const ringMat = new THREE.MeshBasicMaterial({
+                        color: primaryColor.clone().lerp(new THREE.Color('#ffffff'), 0.35),
+                        side: THREE.DoubleSide,
+                        transparent: true,
+                        opacity: 0.55
+                    });
+                    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+                    ringMesh.rotation.x = Math.PI / 2.25;
+                    this.mesh.add(ringMesh);
+                }
+
+                scene.add(this.mesh);
+            }
+
+            createTrail() {
+                this.trailGeometry = new THREE.BufferGeometry();
+                const maxPts = 800;
+                const positions = new Float32Array(maxPts * 3);
+                this.trailGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                this.trailGeometry.setDrawRange(0, 0);
+
+                this.trailMaterial = new THREE.LineBasicMaterial({
+                    color: new THREE.Color(this.colorHex),
+                    transparent: true,
+                    opacity: this.isStar ? 0.85 : 0.6
+                });
+
+                this.trailLine = new THREE.Line(this.trailGeometry, this.trailMaterial);
+                this.trailLine.frustumCulled = false;
+                scene.add(this.trailLine);
+            }
+
+            createVelocityArrow() {
+                const dir = this.velocity.clone().normalize();
+                if (dir.lengthSq() === 0) dir.set(1, 0, 0);
+                this.velocityArrow = new THREE.ArrowHelper(
+                    dir,
+                    this.position,
+                    Math.max(this.radius * 2.5, this.velocity.length() * 3),
+                    0x38bdf8,
+                    1.2,
+                    0.8
+                );
+                this.velocityArrow.visible = simConfig.showVectors;
+                scene.add(this.velocityArrow);
+            }
+
+            updateVisuals(dt, stars) {
+                this.mesh.position.copy(this.position);
+                this.mesh.rotation.y += this.rotationSpeed;
+                this.uniforms.uTime.value += dt;
+
+                // Perbarui koordinat bintang pada shader planet untuk pencahayaan real-time
+                if (!this.isStar && stars.length > 0) {
+                    const count = Math.min(stars.length, 4);
+                    this.uniforms.uStarCount.value = count;
+                    for (let i = 0; i < count; i++) {
+                        this.uniforms.uStarPositions.value[i].copy(stars[i].position);
+                        this.uniforms.uStarColors.value[i].set(stars[i].colorHex);
+                    }
+                }
+
+                // Perbarui jejak lintasan (Orbit Trail)
+                if (simConfig.trailLength > 0) {
+                    this.trailPositions.push(this.position.x, this.position.y, this.position.z);
+                    const maxFloats = simConfig.trailLength * 3;
+                    while (this.trailPositions.length > maxFloats) {
+                        this.trailPositions.splice(0, 3);
+                    }
+
+                    const posAttr = this.trailGeometry.attributes.position;
+                    for (let i = 0; i < this.trailPositions.length; i++) {
+                        posAttr.array[i] = this.trailPositions[i];
+                    }
+                    posAttr.needsUpdate = true;
+                    this.trailGeometry.setDrawRange(0, this.trailPositions.length / 3);
+                    this.trailLine.visible = true;
+                } else {
+                    this.trailPositions.length = 0;
+                    this.trailLine.visible = false;
+                }
+
+                // Perbarui panah vektor kecepatan
+                if (simConfig.showVectors && this.velocity.lengthSq() > 0.0001) {
+                    this.velocityArrow.visible = true;
+                    this.velocityArrow.position.copy(this.position);
+                    this.velocityArrow.setDirection(this.velocity.clone().normalize());
+                    this.velocityArrow.setLength(
+                        Math.max(this.radius * 1.8, this.velocity.length() * 2.8),
+                        1.2,
+                        0.7
+                    );
+                } else {
+                    this.velocityArrow.visible = false;
+                }
+            }
+
+            dispose() {
+                scene.remove(this.mesh);
+                scene.remove(this.trailLine);
+                scene.remove(this.velocityArrow);
+                this.mesh.geometry.dispose();
+                this.material.dispose();
+                this.trailGeometry.dispose();
+                this.trailMaterial.dispose();
+            }
+        }
+
+
+        /***********************************************************************
+         * 4. FISIKA N-BODY & INTEGRATOR RUNGE-KUTTA ORDE 4 (RK4)
+         ***********************************************************************/
+        // Faktor pelembut (softening) kecil untuk mencegah singularitas tak hingga saat jarak -> 0
+        const SOFTENING_SQ = 0.15;
+
+        /**
+         * Menghitung percepatan gravitasi setiap benda berdasarkan posisi saat ini:
+         * a_i = G * sum_{j != i} [ m_j * (r_j - r_i) / (|r_j - r_i|^2 + eps^2)^(3/2) ]
+         */
+        function computeAccelerations(positions, masses) {
+            const n = positions.length;
+            const accelerations = Array.from({ length: n }, () => new THREE.Vector3(0, 0, 0));
+            const G = simConfig.G;
+
+            for (let i = 0; i < n; i++) {
+                for (let j = i + 1; j < n; j++) {
+                    const dx = positions[j].x - positions[i].x;
+                    const dy = positions[j].y - positions[i].y;
+                    const dz = positions[j].z - positions[i].z;
+
+                    const distSq = dx * dx + dy * dy + dz * dz + SOFTENING_SQ;
+                    const invDistCube = 1.0 / (distSq * Math.sqrt(distSq));
+                    const factor = G * invDistCube;
+
+                    const fi = factor * masses[j];
+                    const fj = factor * masses[i];
+
+                    accelerations[i].x += dx * fi;
+                    accelerations[i].y += dy * fi;
+                    accelerations[i].z += dz * fi;
+
+                    accelerations[j].x -= dx * fj;
+                    accelerations[j].y -= dy * fj;
+                    accelerations[j].z -= dz * fj;
+                }
+            }
+            return accelerations;
+        }
+
+        /**
+         * Satu langkah integrasi Runge-Kutta Orde 4 (RK4) penuh untuk seluruh sistem N-body
+         */
+        function stepRK4(dt) {
+            const n = bodies.length;
+            if (n === 0) return;
+
+            const masses = bodies.map(b => b.mass);
+            const r0 = bodies.map(b => b.position.clone());
+            const v0 = bodies.map(b => b.velocity.clone());
+
+            // Evaluasi k1
+            const k1_v = computeAccelerations(r0, masses);
+            const k1_r = v0;
+
+            // Evaluasi k2 pada t + dt/2
+            const r_k2 = r0.map((r, i) => r.clone().addScaledVector(k1_r[i], 0.5 * dt));
+            const v_k2 = v0.map((v, i) => v.clone().addScaledVector(k1_v[i], 0.5 * dt));
+            const k2_v = computeAccelerations(r_k2, masses);
+            const k2_r = v_k2;
+
+            // Evaluasi k3 pada t + dt/2
+            const r_k3 = r0.map((r, i) => r.clone().addScaledVector(k2_r[i], 0.5 * dt));
+            const v_k3 = v0.map((v, i) => v.clone().addScaledVector(k2_v[i], 0.5 * dt));
+            const k3_v = computeAccelerations(r_k3, masses);
+            const k3_r = v_k3;
+
+            // Evaluasi k4 pada t + dt
+            const r_k4 = r0.map((r, i) => r.clone().addScaledVector(k3_r[i], dt));
+            const v_k4 = v0.map((v, i) => v.clone().addScaledVector(k3_v[i], dt));
+            const k4_v = computeAccelerations(r_k4, masses);
+            const k4_r = v_k4;
+
+            // Kombinasi akhir RK4: y_{n+1} = y_n + (dt / 6) * (k1 + 2*k2 + 2*k3 + k4)
+            const dtSix = dt / 6.0;
+            for (let i = 0; i < n; i++) {
+                bodies[i].position.x += dtSix * (k1_r[i].x + 2 * k2_r[i].x + 2 * k3_r[i].x + k4_r[i].x);
+                bodies[i].position.y += dtSix * (k1_r[i].y + 2 * k2_r[i].y + 2 * k3_r[i].y + k4_r[i].y);
+                bodies[i].position.z += dtSix * (k1_r[i].z + 2 * k2_r[i].z + 2 * k3_r[i].z + k4_r[i].z);
+
+                bodies[i].velocity.x += dtSix * (k1_v[i].x + 2 * k2_v[i].x + 2 * k3_v[i].x + k4_v[i].x);
+                bodies[i].velocity.y += dtSix * (k1_v[i].y + 2 * k2_v[i].y + 2 * k3_v[i].y + k4_v[i].y);
+                bodies[i].velocity.z += dtSix * (k1_v[i].z + 2 * k2_v[i].z + 2 * k3_v[i].z + k4_v[i].z);
+            }
+        }
+
+        /**
+         * Deteksi dan Fusi Tabrakan Inelastis (Kekekalan Momentum Linear)
+         */
+        function handleCollisions() {
+            if (!simConfig.collisions || bodies.length < 2) return;
+
+            for (let i = 0; i < bodies.length; i++) {
+                for (let j = i + 1; j < bodies.length; j++) {
+                    const b1 = bodies[i];
+                    const b2 = bodies[j];
+                    const dist = b1.position.distanceTo(b2.position);
+
+                    if (dist < (b1.radius + b2.radius) * 0.82) {
+                        // Tentukan benda yang bertahan (massa lebih besar)
+                        const survivor = b1.mass >= b2.mass ? b1 : b2;
+                        const absorbed = b1.mass >= b2.mass ? b2 : b1;
+
+                        const totalMass = survivor.mass + absorbed.mass;
+
+                        // Kekekalan Momentum: v_baru = (m1*v1 + m2*v2) / (m1 + m2)
+                        const newVel = survivor.velocity.clone().multiplyScalar(survivor.mass)
+                            .add(absorbed.velocity.clone().multiplyScalar(absorbed.mass))
+                            .divideScalar(totalMass);
+
+                        // Posisi pusat massa gabungan
+                        const newPos = survivor.position.clone().multiplyScalar(survivor.mass)
+                            .add(absorbed.position.clone().multiplyScalar(absorbed.mass))
+                            .divideScalar(totalMass);
+
+                        // Radius baru proporsional dengan volume gabungan: R = (R1^3 + R2^3)^(1/3)
+                        const newRadius = Math.cbrt(Math.pow(survivor.radius, 3) + Math.pow(absorbed.radius, 3));
+
+                        // Buat percikan partikel tabrakan
+                        createCollisionBurst(absorbed.position, absorbed.colorHex);
+
+                        survivor.mass = Number(totalMass.toFixed(2));
+                        survivor.velocity.copy(newVel);
+                        survivor.position.copy(newPos);
+
+                        // Sesuaikan skala geometri benda yang bertahan
+                        const scaleFactor = newRadius / survivor.radius;
+                        survivor.mesh.scale.multiplyScalar(scaleFactor);
+                        survivor.radius = newRadius;
+
+                        if (simConfig.focusedBody === absorbed) {
+                            simConfig.focusedBody = survivor;
+                            updateCameraLabel();
+                        }
+
+                        showToast(`💥 Tabrakan: ${absorbed.name} menyatu dengan ${survivor.name}`);
+
+                        absorbed.dispose();
+                        bodies.splice(bodies.indexOf(absorbed), 1);
+                        refreshBodyListUI();
+                        return; // Keluar dan lanjutkan pada langkah berikutnya
+                    }
+                }
+            }
+        }
+
+        /**
+         * Menghitung Energi Kinetik Total (Ek), Energi Potensial Gravitasi (Ep), dan Energi Mekanik (Em)
+         */
+        function computeSystemEnergies() {
+            let kinetic = 0;
+            let potential = 0;
+            const n = bodies.length;
+            const G = simConfig.G;
+
+            for (let i = 0; i < n; i++) {
+                const vSq = bodies[i].velocity.lengthSq();
+                kinetic += 0.5 * bodies[i].mass * vSq;
+
+                for (let j = i + 1; j < n; j++) {
+                    const dist = Math.sqrt(bodies[i].position.distanceToSquared(bodies[j].position) + SOFTENING_SQ);
+                    potential -= (G * bodies[i].mass * bodies[j].mass) / dist;
+                }
+            }
+            return {
+                kinetic,
+                potential,
+                total: kinetic + potential
+            };
+        }
+
+
+        /***********************************************************************
+         * 5. EFEK PARTIKEL LEDAKAN & LATAR BINTANG (STARFIELD)
+         ***********************************************************************/
+        function createStarfield() {
+            const starCount = 3500;
+            const geo = new THREE.BufferGeometry();
+            const positions = new Float32Array(starCount * 3);
+            const colors = new Float32Array(starCount * 3);
+
+            for (let i = 0; i < starCount; i++) {
+                const r = 600 + Math.random() * 1400;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+
+                positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+                positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+                positions[i * 3 + 2] = r * Math.cos(phi);
+
+                const tint = 0.75 + Math.random() * 0.25;
+                colors[i * 3] = tint;
+                colors[i * 3 + 1] = tint;
+                colors[i * 3 + 2] = Math.min(1.0, tint + 0.1);
+            }
+
+            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const mat = new THREE.PointsMaterial({
+                size: 1.8,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.85
+            });
+
+            const starField = new THREE.Points(geo, mat);
+            scene.add(starField);
+        }
+
+        function createCollisionBurst(origin, colorHex) {
+            const count = 45;
+            const geo = new THREE.BufferGeometry();
+            const pos = new Float32Array(count * 3);
+            const velocities = [];
+
+            for (let i = 0; i < count; i++) {
+                pos[i * 3] = origin.x;
+                pos[i * 3 + 1] = origin.y;
+                pos[i * 3 + 2] = origin.z;
+
+                const v = new THREE.Vector3(
+                    (Math.random() - 0.5) * 2,
+                    (Math.random() - 0.5) * 2,
+                    (Math.random() - 0.5) * 2
+                ).normalize().multiplyScalar(2 + Math.random() * 6);
+                velocities.push(v);
+            }
+
+            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            const mat = new THREE.PointsMaterial({
+                color: new THREE.Color(colorHex),
+                size: 1.6,
+                transparent: true,
+                opacity: 1.0
+            });
+
+            const points = new THREE.Points(geo, mat);
+            scene.add(points);
+            particles.push({ points, velocities, age: 0, maxAge: 1.2 });
+        }
+
+        function updateParticles(dt) {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.age += dt;
+                if (p.age >= p.maxAge) {
+                    scene.remove(p.points);
+                    p.points.geometry.dispose();
+                    p.points.material.dispose();
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                const posAttr = p.points.geometry.attributes.position;
+                for (let j = 0; j < p.velocities.length; j++) {
+                    posAttr.array[j * 3] += p.velocities[j].x * dt * 8;
+                    posAttr.array[j * 3 + 1] += p.velocities[j].y * dt * 8;
+                    posAttr.array[j * 3 + 2] += p.velocities[j].z * dt * 8;
+                }
+                posAttr.needsUpdate = true;
+                p.points.material.opacity = 1.0 - (p.age / p.maxAge);
+            }
+        }
+
+
+        /***********************************************************************
+         * 6. SKENARIO PRESET (TATA SURYA, BINER, TABRAKAN GALAKSI, ANGKA-8)
+         ***********************************************************************/
+        function clearAllBodies() {
+            bodies.forEach(b => b.dispose());
+            bodies = [];
+            simConfig.focusedBody = null;
+            simConfig.simTimeYears = 0;
+            clearEnergyGraph();
+            updateCameraLabel();
+        }
+
+        function loadPreset(presetName) {
+            clearAllBodies();
+            simConfig.currentPreset = presetName;
+            const G = simConfig.G;
+
+            if (presetName === 'solar') {
+                const sunMass = 1000;
+                // Matahari Pusat
+                bodies.push(new CelestialBody({
+                    name: 'Matahari',
+                    mass: sunMass,
+                    radius: 8.5,
+                    isStar: true,
+                    color: '#fbbf24',
+                    accentColor: '#ea580c',
+                    x: 0, y: 0, z: 0,
+                    vx: 0, vy: 0, vz: 0
+                }));
+
+                // Data Planet Proporsional
+                const planetSpecs = [
+                    { name: 'Merkurius', dist: 24, mass: 0.15, radius: 1.1, type: 2, color: '#94a3b8', accent: '#475569', inc: 0.05 },
+                    { name: 'Venus', dist: 36, mass: 0.8, radius: 1.6, type: 1, color: '#f59e0b', accent: '#fef3c7', inc: 0.03 },
+                    { name: 'Bumi', dist: 52, mass: 1.0, radius: 1.85, type: 0, color: '#0284c7', accent: '#16a34a', inc: 0.0 },
+                    { name: 'Mars', dist: 68, mass: 0.4, radius: 1.35, type: 2, color: '#dc2626', accent: '#7c2d12', inc: 0.03 },
+                    { name: 'Jupiter', dist: 96, mass: 8.0, radius: 3.8, type: 1, color: '#d97706', accent: '#fde68a', inc: 0.02 },
+                    { name: 'Saturnus', dist: 132, mass: 5.5, radius: 3.1, type: 1, color: '#eab308', accent: '#fef08a', inc: 0.04, ring: true },
+                    { name: 'Neptunus', dist: 168, mass: 3.2, radius: 2.5, type: 3, color: '#2563eb', accent: '#38bdf8', inc: 0.03 }
+                ];
+
+                planetSpecs.forEach((p, idx) => {
+                    const angle = (idx * 1.15) % (Math.PI * 2);
+                    const vMag = Math.sqrt((G * sunMass) / p.dist);
+                    const x = Math.cos(angle) * p.dist;
+                    const z = Math.sin(angle) * p.dist;
+                    const y = Math.sin(angle) * p.dist * p.inc;
+
+                    const vx = -Math.sin(angle) * vMag;
+                    const vz = Math.cos(angle) * vMag;
+
+                    bodies.push(new CelestialBody({
+                        name: p.name,
+                        mass: p.mass,
+                        radius: p.radius,
+                        isStar: false,
+                        shaderType: p.type,
+                        color: p.color,
+                        accentColor: p.accent,
+                        hasRing: p.ring,
+                        x, y, z,
+                        vx, vy: 0, vz
+                    }));
+                });
+
+                // Seimbangkan momentum pusat massa pada Matahari
+                balanceLinearMomentum();
+                controls.target.set(0, 0, 0);
+                camera.position.set(0, 115, 195);
+                showToast('☀️ Skenario Tata Surya dimuat');
+
+            } else if (presetName === 'binary') {
+                const m1 = 600, m2 = 450;
+                const totalM = m1 + m2;
+                const sep = 42;
+                const r1 = sep * (m2 / totalM);
+                const r2 = sep * (m1 / totalM);
+
+                const omega = Math.sqrt((G * totalM) / Math.pow(sep, 3));
+                const v1 = omega * r1;
+                const v2 = omega * r2;
+
+                bodies.push(new CelestialBody({
+                    name: 'Alpha Centauri A',
+                    mass: m1,
+                    radius: 6.8,
+                    isStar: true,
+                    color: '#fde047',
+                    accentColor: '#f97316',
+                    x: -r1, y: 0, z: 0,
+                    vx: 0, vy: 0, vz: v1
+                }));
+
+                bodies.push(new CelestialBody({
+                    name: 'Alpha Centauri B',
+                    mass: m2,
+                    radius: 5.6,
+                    isStar: true,
+                    color: '#38bdf8',
+                    accentColor: '#1d4ed8',
+                    x: r2, y: 0, z: 0,
+                    vx: 0, vy: 0, vz: -v2
+                }));
+
+                // Planet-planet sirkumbiner
+                const radii = [85, 118, 155];
+                const names = ['Tatooine-I', 'Biner-Prime', 'Gliese-Outer'];
+                const types = [2, 0, 1];
+                const colors = ['#f97316', '#0ea5e9', '#a855f7'];
+
+                radii.forEach((dist, i) => {
+                    const vOrb = Math.sqrt((G * totalM) / dist);
+                    bodies.push(new CelestialBody({
+                        name: names[i],
+                        mass: 1.5 + i,
+                        radius: 2.0 + i * 0.5,
+                        isStar: false,
+                        shaderType: types[i],
+                        color: colors[i],
+                        accentColor: '#e2e8f0',
+                        hasRing: i === 2,
+                        x: dist, y: (i - 1) * 4, z: 0,
+                        vx: 0, vy: 0, vz: vOrb
+                    }));
+                });
+
+                balanceLinearMomentum();
+                camera.position.set(0, 120, 190);
+                showToast('✨ Sistem Bintang Biner dimuat');
+
+            } else if (presetName === 'galaxy') {
+                // Dua Inti Galaksi Masif yang Bertabrakan dengan Gugus Bintang Pengiring
+                const coreMass = 550;
+                const cores = [
+                    { name: 'Inti Andromeda', cx: -70, cy: 10, cz: -25, vx: 1.15, vy: -0.1, vz: 0.85, color: '#f59e0b', accent: '#dc2626', ringColor: '#38bdf8' },
+                    { name: 'Inti Bima Sakti', cx: 70, cy: -10, cz: 25, vx: -1.15, vy: 0.1, vz: -0.85, color: '#c084fc', accent: '#4f46e5', ringColor: '#f472b6' }
+                ];
+
+                cores.forEach((c, cIdx) => {
+                    bodies.push(new CelestialBody({
+                        name: c.name,
+                        mass: coreMass,
+                        radius: 6.2,
+                        isStar: true,
+                        color: c.color,
+                        accentColor: c.accent,
+                        x: c.cx, y: c.cy, z: c.cz,
+                        vx: c.vx, vy: c.vy, vz: c.vz
+                    }));
+
+                    // Buat 12 objek bintang/planet di sekitar masing-masing inti
+                    for (let i = 0; i < 12; i++) {
+                        const r = 18 + (i % 3) * 11 + Math.random() * 4;
+                        const angle = (i / 12) * Math.PI * 2;
+                        const vLocal = Math.sqrt((G * coreMass) / r);
+
+                        const px = c.cx + Math.cos(angle) * r;
+                        const pz = c.cz + Math.sin(angle) * r;
+                        const py = c.cy + (Math.random() - 0.5) * 4;
+
+                        const vx = c.vx - Math.sin(angle) * vLocal;
+                        const vz = c.vz + Math.cos(angle) * vLocal;
+
+                        bodies.push(new CelestialBody({
+                            name: `Gugus-${cIdx + 1}.${i + 1}`,
+                            mass: 0.4 + Math.random() * 0.8,
+                            radius: 1.2 + Math.random() * 0.6,
+                            isStar: false,
+                            shaderType: i % 4,
+                            color: c.ringColor,
+                            accentColor: '#ffffff',
+                            x: px, y: py, z: pz,
+                            vx, vy: c.vy, vz
+                        }));
+                    }
+                });
+
+                camera.position.set(0, 165, 240);
+                showToast('🌌 Skenario Tabrakan Galaksi dimuat');
+
+            } else if (presetName === 'figure8') {
+                // Solusi Periodik Tiga-Benda Chenciner & Montgomery (Orbit Angka Delapan)
+                const scalePos = 55.0;
+                const mass = 250.0;
+                // Skala kecepatan sesuai hukum skala gravitasi: v ~ sqrt(G * M / L)
+                const vScale = Math.sqrt((G * mass) / scalePos);
+
+                const x1 = 0.97000436 * scalePos;
+                const z1 = -0.24308753 * scalePos;
+                const vx3 = -0.93240737 * vScale;
+                const vz3 = -0.86473146 * vScale;
+
+                bodies.push(new CelestialBody({
+                    name: 'Bintang Helios-A',
+                    mass: mass,
+                    radius: 5.0,
+                    isStar: true,
+                    color: '#fbbf24',
+                    accentColor: '#ea580c',
+                    x: x1, y: 0, z: z1,
+                    vx: -vx3 / 2, vy: 0, vz: -vz3 / 2
+                }));
+
+                bodies.push(new CelestialBody({
+                    name: 'Bintang Sirius-B',
+                    mass: mass,
+                    radius: 5.0,
+                    isStar: true,
+                    color: '#38bdf8',
+                    accentColor: '#2563eb',
+                    x: -x1, y: 0, z: -z1,
+                    vx: -vx3 / 2, vy: 0, vz: -vz3 / 2
+                }));
+
+                bodies.push(new CelestialBody({
+                    name: 'Bintang Vega-C',
+                    mass: mass,
+                    radius: 5.0,
+                    isStar: true,
+                    color: '#f43f5e',
+                    accentColor: '#9f1239',
+                    x: 0, y: 0, z: 0,
+                    vx: vx3, vy: 0, vz: vz3
+                }));
+
+                camera.position.set(0, 130, 140);
+                showToast('♾️ Skenario Orbit Tiga-Benda Angka-8 dimuat');
+            }
+
+            refreshBodyListUI();
+        }
+
+        /**
+         * Menyeimbangkan momentum total sistem agar pusat massa tidak hanyut keluar layar
+         */
+        function balanceLinearMomentum() {
+            if (bodies.length === 0) return;
+            const totalMomentum = new THREE.Vector3();
+            let totalMass = 0;
+
+            bodies.forEach(b => {
+                totalMomentum.addScaledVector(b.velocity, b.mass);
+                totalMass += b.mass;
+            });
+
+            if (totalMass > 0) {
+                const vDrift = totalMomentum.divideScalar(totalMass);
+                bodies.forEach(b => b.velocity.sub(vDrift));
+            }
+        }
+
+
+        /***********************************************************************
+         * 7. GRAFIK ENERGI REAL-TIME (HTML5 CANVAS 2D)
+         ***********************************************************************/
+        const energyCanvas = document.getElementById('energy-canvas');
+        const energyCtx = energyCanvas.getContext('2d');
+
+        function clearEnergyGraph() {
+            energyHistory.kinetic.length = 0;
+            energyHistory.potential.length = 0;
+            energyHistory.total.length = 0;
+        }
+
+        function recordAndDrawEnergy() {
+            const energies = computeSystemEnergies();
+
+            // Tampilkan angka pada UI
+            document.getElementById('val-ke').textContent = energies.kinetic.toFixed(1);
+            document.getElementById('val-pe').textContent = energies.potential.toFixed(1);
+            document.getElementById('val-te').textContent = energies.total.toFixed(1);
+
+            if (!simConfig.paused) {
+                energyHistory.kinetic.push(energies.kinetic);
+                energyHistory.potential.push(energies.potential);
+                energyHistory.total.push(energies.total);
+
+                if (energyHistory.kinetic.length > energyHistory.maxPoints) {
+                    energyHistory.kinetic.shift();
+                    energyHistory.potential.shift();
+                    energyHistory.total.shift();
+                }
+            }
+
+            // Pastikan ukuran piksel canvas sesuai dengan ukuran tampilan
+            const rect = energyCanvas.getBoundingClientRect();
+            if (energyCanvas.width !== rect.width || energyCanvas.height !== rect.height) {
+                energyCanvas.width = rect.width;
+                energyCanvas.height = rect.height;
+            }
+
+            const w = energyCanvas.width;
+            const h = energyCanvas.height;
+            energyCtx.clearRect(0, 0, w, h);
+
+            // Gambar garis referensi nol dan grid tipis
+            energyCtx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+            energyCtx.lineWidth = 1;
+            energyCtx.beginPath();
+            energyCtx.moveTo(0, h * 0.5);
+            energyCtx.lineTo(w, h * 0.5);
+            energyCtx.stroke();
+
+            const len = energyHistory.total.length;
+            if (len < 2) return;
+
+            // Cari nilai minimum & maksimum untuk normalisasi vertikal
+            let minVal = Infinity;
+            let maxVal = -Infinity;
+            for (let i = 0; i < len; i++) {
+                minVal = Math.min(minVal, energyHistory.kinetic[i], energyHistory.potential[i], energyHistory.total[i]);
+                maxVal = Math.max(maxVal, energyHistory.kinetic[i], energyHistory.potential[i], energyHistory.total[i]);
+            }
+
+            const span = Math.max(Math.abs(maxVal - minVal), 1.0);
+            const pad = 10;
+
+            const mapY = (val) => {
+                const norm = (val - minVal) / span;
+                return h - pad - norm * (h - pad * 2);
+            };
+
+            const drawCurve = (dataArray, strokeColor, lineWidth = 1.8) => {
+                energyCtx.strokeStyle = strokeColor;
+                energyCtx.lineWidth = lineWidth;
+                energyCtx.beginPath();
+                for (let i = 0; i < len; i++) {
+                    const x = (i / (energyHistory.maxPoints - 1)) * w;
+                    const y = mapY(dataArray[i]);
+                    if (i === 0) energyCtx.moveTo(x, y);
+                    else energyCtx.lineTo(x, y);
+                }
+                energyCtx.stroke();
+            };
+
+            drawCurve(energyHistory.potential, '#38bdf8', 1.6); // Biru: Potensial
+            drawCurve(energyHistory.kinetic, '#34d399', 1.6);   // Hijau: Kinetik
+            drawCurve(energyHistory.total, '#fbbf24', 2.2);     // Emas: Energi Mekanik Total
+        }
+
+
+        /***********************************************************************
+         * 8. ANTARMUKA PENGGUNA (UI) & INTERAKSI PENGGUNA
+         ***********************************************************************/
+        function showToast(message) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'glass-panel px-4 py-2 rounded-xl text-xs font-medium text-sky-200 border border-sky-400/30 shadow-lg transition-opacity duration-300';
+            toast.textContent = message;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 2800);
+        }
+
+        function refreshBodyListUI() {
+            const container = document.getElementById('body-list-container');
+            document.getElementById('stat-body-count').textContent = bodies.length;
+            container.innerHTML = '';
+
+            bodies.forEach(b => {
+                const isFocused = simConfig.focusedBody === b;
+                const item = document.createElement('div');
+                item.className = `p-2.5 rounded-xl border transition flex items-center justify-between gap-2 cursor-pointer ${
+                    isFocused
+                        ? 'bg-sky-500/20 border-sky-400/60'
+                        : 'bg-slate-800/60 hover:bg-slate-800 border-slate-700/70'
+                }`;
+
+                item.innerHTML = `
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <span class="w-3.5 h-3.5 rounded-full flex-shrink-0 shadow" style="background-color: ${b.colorHex}; box-shadow: 0 0 8px ${b.colorHex}"></span>
+                        <div class="truncate">
+                            <div class="font-semibold text-slate-200 truncate flex items-center gap-1.5">
+                                <span>${b.name}</span>
+                                ${b.isStar ? '<span class="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300">Bintang</span>' : ''}
+                            </div>
+                            <div class="text-[10px] font-mono-code text-slate-400">
+                                M: ${b.mass} | v: ${b.velocity.length().toFixed(2)}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1 flex-shrink-0">
+                        <button class="btn-focus px-2 py-1 rounded-lg bg-slate-700/70 hover:bg-sky-500/30 text-[10px] text-sky-300 transition">
+                            Fokus
+                        </button>
+                        <button class="btn-delete p-1 rounded-lg bg-slate-700/70 hover:bg-rose-500/30 text-slate-400 hover:text-rose-300 transition" title="Hapus Objek">
+                            ✕
+                        </button>
+                    </div>
+                `;
+
+                // Klik untuk fokus kamera ke objek ini
+                item.addEventListener('click', (e) => {
+                    if (e.target.closest('.btn-delete')) return;
+                    simConfig.focusedBody = b;
+                    updateCameraLabel();
+                    refreshBodyListUI();
+                });
+
+                // Hapus benda dari ruang 3D
+                item.querySelector('.btn-delete').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (simConfig.focusedBody === b) {
+                        simConfig.focusedBody = null;
+                        updateCameraLabel();
+                    }
+                    b.dispose();
+                    bodies = bodies.filter(item => item !== b);
+                    refreshBodyListUI();
+                    showToast(`🗑️ ${b.name} dihapus dari simulasi`);
+                });
+
+                container.appendChild(item);
+            });
+        }
+
+        function updateCameraLabel() {
+            const label = document.getElementById('camera-target-label');
+            label.textContent = simConfig.focusedBody ? simConfig.focusedBody.name : 'Pusat Koordinat';
+        }
+
+        function setupEventListeners() {
+            // Navigasi Tab
+            const tabButtons = document.querySelectorAll('.tab-btn');
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const targetId = btn.getAttribute('data-tab');
+                    tabButtons.forEach(b => {
+                        b.classList.remove('bg-sky-500/20', 'text-sky-300', 'border', 'border-sky-500/30');
+                        b.classList.add('text-slate-400');
+                    });
+                    btn.classList.add('bg-sky-500/20', 'text-sky-300', 'border', 'border-sky-500/30');
+                    btn.classList.remove('text-slate-400');
+
+                    tabContents.forEach(content => {
+                        content.classList.toggle('hidden', content.id !== targetId);
+                    });
+                });
+            });
+
+            // Toggle Sembunyikan/Tampilkan UI
+            let uiVisible = true;
+            document.getElementById('btn-toggle-ui').addEventListener('click', () => {
+                uiVisible = !uiVisible;
+                const ctrlPanel = document.getElementById('control-panel');
+                const energyPanel = document.getElementById('energy-panel');
+                ctrlPanel.style.transform = uiVisible ? 'translateX(0)' : 'translateX(-110%)';
+                energyPanel.style.transform = uiVisible ? 'translateY(0)' : 'translateY(120%)';
+            });
+
+            // Jeda / Lanjutkan Simulasi
+            document.getElementById('btn-play-pause').addEventListener('click', () => {
+                simConfig.paused = !simConfig.paused;
+                document.getElementById('play-pause-text').textContent = simConfig.paused ? 'Lanjut' : 'Jeda';
+            });
+
+            // Reset Preset Saat Ini
+            document.getElementById('btn-reset-preset').addEventListener('click', () => {
+                loadPreset(simConfig.currentPreset);
+            });
+
+            // Sliders Kontrol
+            document.getElementById('slider-timescale').addEventListener('input', (e) => {
+                simConfig.timeScale = parseFloat(e.target.value);
+                document.getElementById('val-timescale').textContent = `${simConfig.timeScale.toFixed(1)}x`;
+            });
+
+            document.getElementById('slider-substeps').addEventListener('input', (e) => {
+                simConfig.subSteps = parseInt(e.target.value, 10);
+                document.getElementById('val-substeps').textContent = `${simConfig.subSteps} langkah`;
+            });
+
+            document.getElementById('slider-gravity').addEventListener('input', (e) => {
+                simConfig.G = parseFloat(e.target.value);
+                document.getElementById('val-gravity').textContent = simConfig.G.toFixed(2);
+            });
+
+            document.getElementById('slider-trail-length').addEventListener('input', (e) => {
+                simConfig.trailLength = parseInt(e.target.value, 10);
+                document.getElementById('val-trail-length').textContent = `${simConfig.trailLength} titik`;
+            });
+
+            document.getElementById('slider-bloom').addEventListener('input', (e) => {
+                const strength = parseFloat(e.target.value);
+                bloomPass.strength = strength;
+                document.getElementById('val-bloom').textContent = strength.toFixed(2);
+            });
+
+            // Checkboxes
+            document.getElementById('chk-collisions').addEventListener('change', (e) => {
+                simConfig.collisions = e.target.checked;
+            });
+
+            document.getElementById('chk-grid').addEventListener('change', (e) => {
+                simConfig.showGrid = e.target.checked;
+                gridHelper.visible = simConfig.showGrid;
+            });
+
+            document.getElementById('chk-barycenter').addEventListener('change', (e) => {
+                simConfig.showBarycenter = e.target.checked;
+                barycenterMarker.visible = simConfig.showBarycenter;
+            });
+
+            document.getElementById('chk-vectors').addEventListener('change', (e) => {
+                simConfig.showVectors = e.target.checked;
+            });
+
+            // Form Tambah Benda Langit Baru
+            document.getElementById('btn-random-pos').addEventListener('click', () => {
+                const dist = 45 + Math.floor(Math.random() * 110);
+                const angle = Math.random() * Math.PI * 2;
+                document.getElementById('inp-px').value = Math.round(Math.cos(angle) * dist);
+                document.getElementById('inp-py').value = Math.round((Math.random() - 0.5) * 14);
+                document.getElementById('inp-pz').value = Math.round(Math.sin(angle) * dist);
+                calculateCircularOrbitVelocity();
+            });
+
+            document.getElementById('btn-calc-orbit').addEventListener('click', calculateCircularOrbitVelocity);
+
+            document.getElementById('btn-spawn-body').addEventListener('click', () => {
+                const name = document.getElementById('inp-name').value.trim() || `Planet-${bodyIdCounter}`;
+                const typeStr = document.getElementById('inp-type').value;
+                const mass = parseFloat(document.getElementById('inp-mass').value) || 1.0;
+                const radius = parseFloat(document.getElementById('inp-radius').value) || 1.8;
+                const color = document.getElementById('inp-color').value;
+                const hasRing = document.getElementById('inp-ring').checked;
+
+                const x = parseFloat(document.getElementById('inp-px').value) || 0;
+                const y = parseFloat(document.getElementById('inp-py').value) || 0;
+                const z = parseFloat(document.getElementById('inp-pz').value) || 0;
+
+                const vx = parseFloat(document.getElementById('inp-vx').value) || 0;
+                const vy = parseFloat(document.getElementById('inp-vy').value) || 0;
+                const vz = parseFloat(document.getElementById('inp-vz').value) || 0;
+
+                const typeMap = { terrestrial: 0, gas: 1, rocky: 2, ice: 3, star: 0 };
+                const isStar = typeStr === 'star';
+
+                const newBody = new CelestialBody({
+                    name,
+                    mass,
+                    radius,
+                    isStar,
+                    shaderType: typeMap[typeStr] ?? 0,
+                    color,
+                    accentColor: '#ffffff',
+                    hasRing,
+                    x, y, z,
+                    vx, vy, vz
+                });
+
+                bodies.push(newBody);
+                refreshBodyListUI();
+                showToast(`🚀 ${name} berhasil diluncurkan ke orbit!`);
+            });
+
+            // Reset Kamera ke Pusat Koordinat
+            document.getElementById('btn-reset-camera').addEventListener('click', () => {
+                simConfig.focusedBody = null;
+                controls.target.set(0, 0, 0);
+                updateCameraLabel();
+                refreshBodyListUI();
+            });
+
+            // Bersihkan Grafik Energi
+            document.getElementById('btn-clear-graph').addEventListener('click', clearEnergyGraph);
+
+            // Raycasting Klik pada Objek di Layar 3D
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+            let pointerDownPos = { x: 0, y: 0 };
+
+            renderer.domElement.addEventListener('pointerdown', (e) => {
+                pointerDownPos = { x: e.clientX, y: e.clientY };
+            });
+
+            renderer.domElement.addEventListener('pointerup', (e) => {
+                const moveDist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+                if (moveDist > 6) return; // Abaikan jika pengguna sedang memutar kamera
+
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+                const meshes = bodies.map(b => b.mesh);
+                const intersects = raycaster.intersectObjects(meshes, false);
+
+                if (intersects.length > 0) {
+                    const selectedBody = intersects[0].object.userData.body;
+                    if (selectedBody) {
+                        simConfig.focusedBody = selectedBody;
+                        updateCameraLabel();
+                        refreshBodyListUI();
+                        showToast(`🎯 Kamera mengunci: ${selectedBody.name}`);
+                    }
+                }
+            });
+
+            // Responsivitas Ukuran Layar
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                composer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        /**
+         * Menghitung vektor kecepatan orbit sirkular otomatis terhadap benda paling masif
+         */
+        function calculateCircularOrbitVelocity() {
+            if (bodies.length === 0) return;
+
+            // Cari bintang / benda paling masif sebagai pusat referensi
+            let primary = bodies[0];
+            for (const b of bodies) {
+                if (b.mass > primary.mass) primary = b;
+            }
+
+            const px = parseFloat(document.getElementById('inp-px').value) || 0;
+            const py = parseFloat(document.getElementById('inp-py').value) || 0;
+            const pz = parseFloat(document.getElementById('inp-pz').value) || 0;
+
+            const relPos = new THREE.Vector3(px, py, pz).sub(primary.position);
+            const dist = relPos.length();
+            if (dist < 0.1) return;
+
+            const speed = Math.sqrt((simConfig.G * primary.mass) / dist);
+            const up = new THREE.Vector3(0, 1, 0);
+            let tangent = new THREE.Vector3().crossVectors(up, relPos).normalize();
+            if (tangent.lengthSq() < 0.01) {
+                tangent.set(0, 0, 1);
+            }
+
+            const finalVel = tangent.multiplyScalar(speed).add(primary.velocity);
+            document.getElementById('inp-vx').value = finalVel.x.toFixed(2);
+            document.getElementById('inp-vy').value = finalVel.y.toFixed(2);
+            document.getElementById('inp-vz').value = finalVel.z.toFixed(2);
+        }
+
+
+        /***********************************************************************
+         * 9. INISIALISASI THREE.JS, POST-PROCESSING & LOOP UTAMA
+         ***********************************************************************/
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color('#030712');
+
+            camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 4000);
+            camera.position.set(0, 115, 195);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.toneMapping = THREE.ReinhardToneMapping;
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.06;
+            controls.maxDistance = 1500;
+            controls.minDistance = 5;
+
+            // Post-Processing: RenderPass + UnrealBloomPass
+            const renderScene = new THREE.RenderPass(scene, camera);
+            bloomPass = new THREE.UnrealBloomPass(
+                new THREE.Vector2(window.innerWidth, window.innerHeight),
+                1.35, // Strength
+                0.45, // Radius
+                0.78  // Threshold (hanya bintang dan efek terang yang memancarkan glow)
+            );
+
+            composer = new THREE.EffectComposer(renderer);
+            composer.addPass(renderScene);
+            composer.addPass(bloomPass);
+
+            // Grid Referensi Ruang 3D
+            gridHelper = new THREE.GridHelper(400, 40, 0x38bdf8, 0x1e293b);
+            gridHelper.visible = simConfig.showGrid;
+            scene.add(gridHelper);
+
+            // Penanda Pusat Massa Sistem (Barycenter Crosshair)
+            const baryGeo = new THREE.OctahedronGeometry(1.4, 0);
+            const baryMat = new THREE.MeshBasicMaterial({ color: 0x10b981, wireframe: true });
+            barycenterMarker = new THREE.Mesh(baryGeo, baryMat);
+            scene.add(barycenterMarker);
+
+            createStarfield();
+        }
+
+        function updateBarycenterMarker() {
+            if (!simConfig.showBarycenter || bodies.length === 0) {
+                barycenterMarker.visible = false;
+                return;
+            }
+            const com = new THREE.Vector3();
+            let totalMass = 0;
+            for (const b of bodies) {
+                com.addScaledVector(b.position, b.mass);
+                totalMass += b.mass;
+            }
+            if (totalMass > 0) {
+                com.divideScalar(totalMass);
+                barycenterMarker.position.copy(com);
+                barycenterMarker.rotation.y += 0.03;
+                barycenterMarker.visible = true;
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Hitung FPS
+            const now = performance.now();
+            frameCount++;
+            if (now - lastFrameTime >= 500) {
+                const fps = Math.round((frameCount * 1000) / (now - lastFrameTime));
+                document.getElementById('stat-fps').textContent = fps;
+                frameCount = 0;
+                lastFrameTime = now;
+            }
+
+            // Langkah Integrasi Fisika N-Body RK4
+            const totalDt = simConfig.baseDt * simConfig.timeScale;
+            if (!simConfig.paused && bodies.length > 0) {
+                const subDt = totalDt / simConfig.subSteps;
+                for (let s = 0; s < simConfig.subSteps; s++) {
+                    stepRK4(subDt);
+                    handleCollisions();
+                }
+                simConfig.simTimeYears += totalDt * 0.08;
+                document.getElementById('stat-sim-time').textContent = `${simConfig.simTimeYears.toFixed(2)} thn`;
+            }
+
+            // Perbarui Visual & Shader semua Benda Langit
+            const stars = bodies.filter(b => b.isStar);
+            bodies.forEach(b => b.updateVisuals(totalDt, stars));
+
+            // Perbarui Partikel & Penanda Pusat Massa
+            updateParticles(simConfig.baseDt);
+            updateBarycenterMarker();
+
+            // Ikuti objek yang sedang difokuskan kamera
+            if (simConfig.focusedBody) {
+                controls.target.lerp(simConfig.focusedBody.position, 0.15);
+            }
+
+            controls.update();
+            recordAndDrawEnergy();
+            composer.render();
+        }
+
+        // Jalankan Aplikasi saat halaman selesai dimuat
+        window.onload = function () {
+            initThreeJS();
+            setupEventListeners();
+            loadPreset('solar');
+            calculateCircularOrbitVelocity();
+            animate();
+        };
+    </script>
+</body>
+</html>
